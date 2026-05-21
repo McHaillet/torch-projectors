@@ -84,7 +84,27 @@ else:
 
 # Set CUDA architectures if not specified and CUDA is being used
 if use_cuda and "TORCH_CUDA_ARCH_LIST" not in os.environ:
-    os.environ["TORCH_CUDA_ARCH_LIST"] = "7.0;7.5;8.0;8.6;8.9;9.0"
+    # Volta (7.0) through Hopper (9.0): supported by every CUDA 12.x toolkit.
+    archs = ["7.0", "7.5", "8.0", "8.6", "8.9", "9.0"]
+    # Blackwell requires CUDA >= 12.8:
+    #   10.0 = datacenter Blackwell (B100, B200, GB200)
+    #   12.0 = consumer/workstation Blackwell (RTX 50-series, RTX PRO Blackwell)
+    if build_backend in ["cu128", "cu129"]:
+        archs.extend(["10.0", "12.0"])
+    elif build_backend == "cu126":
+        pass  # CUDA 12.6 nvcc rejects sm_100/sm_120
+    else:
+        # Auto-detect: include Blackwell if the active toolkit is CUDA >= 12.8.
+        cuda_ver = torch.version.cuda or ""
+        try:
+            parts = cuda_ver.split(".")
+            if len(parts) >= 2 and (int(parts[0]), int(parts[1])) >= (12, 8):
+                archs.extend(["10.0", "12.0"])
+        except ValueError:
+            pass
+    # Embed PTX for the highest target so future architectures can JIT-compile.
+    archs[-1] = archs[-1] + "+PTX"
+    os.environ["TORCH_CUDA_ARCH_LIST"] = ";".join(archs)
     print(f"Set TORCH_CUDA_ARCH_LIST to: {os.environ['TORCH_CUDA_ARCH_LIST']}")
 else:
     print(f"TORCH_CUDA_ARCH_LIST: {os.environ.get('TORCH_CUDA_ARCH_LIST', 'Not set')}")
