@@ -1,0 +1,174 @@
+name: Publish to PyPI (CPU)
+
+# Publishes the CPU-only distribution to PyPI.
+#
+# Currently MANUAL-ONLY (workflow_dispatch) while debugging, so it doesn't
+# co-trigger build-wheels.yml (which also fires on v* tags). Run it from the
+# Actions tab: leave "publish" off for a build-only dry run, or set a real
+# version + "publish" on to upload to PyPI. The v* tag trigger is stubbed in
+# `on:` for when automated releases are re-enabled.
+#
+# PyPI cannot host the CUDA wheel variants (no client-side CUDA detection, and
+# PyPI rejects PEP 440 local versions like "+cu126"/"+cpu"), so only the
+# non-CUDA wheels and an sdist are uploaded here. The GitHub-Pages wheelhouse
+# flow in build-wheels.yml / publish-wheelhouse.yml is unaffected.
+#
+# Versioning: each build job writes torch_projectors/_version.py from the tag
+# BEFORE building. setup.py reads that marker verbatim with no local suffix
+# (see _read_version_marker), so wheels and the sdist carry a clean public
+# version (e.g. 0.1.0). The marker ships inside the sdist too, so end-user
+# source installs reproduce the exact version.
+#
+# Auth: PyPI Trusted Publishing (OIDC). No secrets are stored; configure a
+# trusted publisher on PyPI for this repo + workflow + the "pypi" environment.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, e.g. 0.1.0. Blank = 0.0.0.dev<run> (build only).'
+        required: false
+        default: ''
+      publish:
+        description: 'Upload to PyPI after building (set a real version above).'
+        type: boolean
+        required: false
+        default: false
+  # TODO: re-enable automated releases once debugging is done.
+  # NOTE: build-wheels.yml ALSO triggers on v* tags, so enabling this runs
+  # both workflows on a tag push.
+  # push:
+  #   tags:
+  #     - 'v*'
+
+jobs:
+  set-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_release: ${{ steps.v.outputs.is_release }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Automated release from a v* tag (currently disabled, see on:).
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            # Manual run: use the provided version, or a dev version for a
+            # build-only dry run. Publish only when explicitly requested.
+            V="${{ github.event.inputs.version }}"
+            if [[ -z "$V" ]]; then V="0.0.0.dev${GITHUB_RUN_NUMBER}"; fi
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.event.inputs.publish }}" == "true" ]]; then
+              echo "is_release=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_release=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  build-wheels:
+    name: Wheels on ${{ matrix.os }}
+    needs: set-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux-cpu-x64-4
+            cibw-arch: "x86_64"
+            backend: "cpu"
+            torch-version: "2.6.0"
+            torch-index: "https://download.pytorch.org/whl/cpu"
+          - os: macos-15-xlarge
+            cibw-arch: "arm64"
+            backend: "cpu-mps"
+            torch-version: "2.6.0"
+            torch-index: ""   # macOS before-build pins torch directly
+          - os: windows-x64-cpu
+            cibw-arch: "AMD64"
+            backend: "cpu"
+            torch-version: "2.6.0"
+            torch-index: "https://download.pytorch.org/whl/cpu"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Write version marker
+        shell: bash
+        run: |
+          echo "__version__ = \"${{ needs.set-version.outputs.version }}\"" > torch_projectors/_version.py
+          cat torch_projectors/_version.py
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.23
+        env:
+          CIBW_ARCHS: ${{ matrix.cibw-arch }}
+          TORCH_PROJECTORS_BUILD_BACKEND: ${{ matrix.backend }}
+          TORCH_PROJECTORS_TORCH_VERSION: ${{ matrix.torch-version }}
+          TORCH_PROJECTORS_TORCH_INDEX: ${{ matrix.torch-index }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.cibw-arch }}
+          path: ./wheelhouse/*.whl
+
+  build-sdist:
+    name: Source distribution
+    needs: set-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Write version marker
+        run: |
+          echo "__version__ = \"${{ needs.set-version.outputs.version }}\"" > torch_projectors/_version.py
+          cat torch_projectors/_version.py
+
+      - name: Install build dependencies
+        # setup.py imports torch at build time, so the sdist build runs without
+        # isolation against a pre-installed CPU PyTorch + pybind11.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build setuptools wheel pybind11 \
+            torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Build sdist
+        run: python -m build --sdist --no-isolation
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: ./dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [set-version, build-wheels, build-sdist]
+    if: needs.set-version.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # required for Trusted Publishing (OIDC)
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

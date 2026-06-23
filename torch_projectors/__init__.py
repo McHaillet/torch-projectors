@@ -17,6 +17,13 @@ torch.ops.load_library(_lib_path)
 # 2. Import the `ops` module to run the Python registration.
 from . import ops
 
+# Expose the package version when the build wrote a _version.py marker
+# (PyPI/release builds). Falls back to "unknown" for in-place/source checkouts.
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "unknown"
+
 # 3. Expose the user-facing function.
 from .ops import project_2d_forw, project_2d_back, project_3d_to_2d_forw, project_3d_to_2d_back, backproject_2d_forw, backproject_2d_to_3d_forw, backproject_2d_to_3d_back
 

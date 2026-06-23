@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# Local design docs (brainstorming specs)
+docs/
+
+# Generated at build time by the PyPI publish workflow
+torch_projectors/_version.py
+
 # Distribution / packaging
 .Python
 build/

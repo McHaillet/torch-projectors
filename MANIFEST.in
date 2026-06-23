@@ -1,0 +1,11 @@
+# Files required to build the C++/Metal extension from a source distribution.
+include LICENSE.txt
+include README.md
+include pyproject.toml
+include generate_metal_headers.py
+
+# Native sources (CPU, CUDA, MPS) and headers needed to compile from sdist.
+recursive-include csrc *.cpp *.h *.cu *.cuh *.mm *.metal
+
+# Version marker written by the PyPI publish workflow (clean, suffix-free).
+include torch_projectors/_version.py
