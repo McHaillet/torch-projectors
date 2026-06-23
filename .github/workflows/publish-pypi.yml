@@ -2,11 +2,10 @@ name: Publish to PyPI (CPU)
 
 # Publishes the CPU-only distribution to PyPI.
 #
-# Currently MANUAL-ONLY (workflow_dispatch) while debugging, so it doesn't
-# co-trigger build-wheels.yml (which also fires on v* tags). Run it from the
-# Actions tab: leave "publish" off for a build-only dry run, or set a real
-# version + "publish" on to upload to PyPI. The v* tag trigger is stubbed in
-# `on:` for when automated releases are re-enabled.
+# Triggered on v* tags (full release) or manually via workflow_dispatch. On a
+# tag push, build-wheels.yml ALSO runs (-> GitHub Pages wheelhouse + Release).
+# For a manual run, leave "publish" off for a build-only dry run, or set a real
+# version + "publish" on to upload to PyPI.
 #
 # PyPI cannot host the CUDA wheel variants (no client-side CUDA detection, and
 # PyPI rejects PEP 440 local versions like "+cu126"/"+cpu"), so only the
@@ -23,6 +22,9 @@ name: Publish to PyPI (CPU)
 # trusted publisher on PyPI for this repo + workflow + the "pypi" environment.
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -34,12 +36,8 @@ on:
         type: boolean
         required: false
         default: false
-  # TODO: re-enable automated releases once debugging is done.
-  # NOTE: build-wheels.yml ALSO triggers on v* tags, so enabling this runs
-  # both workflows on a tag push.
-  # push:
-  #   tags:
-  #     - 'v*'
+  # NOTE: build-wheels.yml ALSO triggers on v* tags, so a tag push runs both
+  # this workflow (-> PyPI) and the wheelhouse build.
 
 jobs:
   set-version:
