@@ -22,7 +22,7 @@ skip = "*-win32 *-manylinux_i686 *-musllinux* pp*"
 environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
 
 # Install delocate for wheel repair
-before-build = "pip install pybind11 setuptools wheel numpy delocate ninja torch==2.6.0"
+before-build = "pip install pybind11 setuptools wheel numpy delocate ninja torch==2.5.1"
 # Skip wheel repair - PyTorch extensions don't need library bundling
 repair-wheel-command = ""
 
@@ -44,10 +44,10 @@ source /opt/rh/gcc-toolset-13/enable
 # Install CUDA toolkit if needed
 if [[ "$TORCH_PROJECTORS_BUILD_BACKEND" == cu* ]]; then
     case "$TORCH_PROJECTORS_CUDA_VERSION" in
-        "12.6") CUDA_PKG="cuda-toolkit-12-6" ;;
-        "12.8") CUDA_PKG="cuda-toolkit-12-8" ;;  
-        "12.9") CUDA_PKG="cuda-toolkit-12-9" ;;
-        *) CUDA_PKG="cuda-toolkit-12-6" ;;
+        "11.8") CUDA_PKG="cuda-toolkit-11-8" ;;
+        "12.1") CUDA_PKG="cuda-toolkit-12-1" ;;
+        "12.4") CUDA_PKG="cuda-toolkit-12-4" ;;
+        *) CUDA_PKG="cuda-toolkit-12-4" ;;
     esac
     echo "Installing CUDA toolkit: $CUDA_PKG"
     wget https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
@@ -100,9 +100,9 @@ LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 repair-wheel-command = "auditwheel repair --exclude 'libtorch*.so' --exclude 'libc10*.so' -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.windows]
-before-build = "pip install pybind11 setuptools wheel numpy delvewheel torch==2.6.0"
+before-build = "pip install pybind11 setuptools wheel numpy delvewheel torch==2.5.1"
 # Skip bundling PyTorch libraries - users should have their own PyTorch
 repair-wheel-command = "delvewheel repair --exclude c10.dll --exclude torch_cpu.dll --exclude torch_python.dll --exclude torch.dll -w {dest_dir} {wheel}"
 
 # Build variants - use environment variable passing without overrides
-# The backend is passed from the GitHub Actions matrix directly 
+# The backend is passed from the GitHub Actions matrix directly
