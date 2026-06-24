@@ -84,8 +84,8 @@ else:
 
 # Set CUDA architectures if not specified and CUDA is being used
 if use_cuda and "TORCH_CUDA_ARCH_LIST" not in os.environ:
-    # Volta (7.0) through Ampere (8.6): supported by CUDA 11.8 and later.
-    archs = ["7.0", "7.5", "8.0", "8.6"]
+    # Pascal (6.1) through Ampere (8.6): supported by CUDA 11.8 and later.
+    archs = ["6.1", "7.0", "7.5", "8.0", "8.6"]
     # Hopper (9.0) requires CUDA >= 12.0:
     if build_backend in ["cu121", "cu124"]:
         archs.append("9.0")
