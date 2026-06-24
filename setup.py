@@ -71,7 +71,7 @@ except Exception as e:
     print(f"Error checking sys.path: {e}")
 
 # Determine CUDA usage based on backend
-if build_backend in ["cuda", "cu126", "cu128", "cu129"]:
+if build_backend in ["cuda", "cu118", "cu121", "cu124"]:
     use_cuda = True
     print(f"Forcing CUDA build due to backend: {build_backend}")
 elif build_backend in ["cpu", "cpu-mps"]:
@@ -84,22 +84,18 @@ else:
 
 # Set CUDA architectures if not specified and CUDA is being used
 if use_cuda and "TORCH_CUDA_ARCH_LIST" not in os.environ:
-    # Volta (7.0) through Hopper (9.0): supported by every CUDA 12.x toolkit.
-    archs = ["7.0", "7.5", "8.0", "8.6", "8.9", "9.0"]
-    # Blackwell requires CUDA >= 12.8:
-    #   10.0 = datacenter Blackwell (B100, B200, GB200)
-    #   12.0 = consumer/workstation Blackwell (RTX 50-series, RTX PRO Blackwell)
-    if build_backend in ["cu128", "cu129"]:
-        archs.extend(["10.0", "12.0"])
-    elif build_backend == "cu126":
-        pass  # CUDA 12.6 nvcc rejects sm_100/sm_120
+    # Volta (7.0) through Ampere (8.6): supported by CUDA 11.8 and later.
+    archs = ["7.0", "7.5", "8.0", "8.6"]
+    # Hopper (9.0) requires CUDA >= 12.0:
+    if build_backend in ["cu121", "cu124"]:
+        archs.append("9.0")
     else:
-        # Auto-detect: include Blackwell if the active toolkit is CUDA >= 12.8.
+        # Auto-detect: include Hopper if the active toolkit is CUDA >= 12.0.
         cuda_ver = torch.version.cuda or ""
         try:
             parts = cuda_ver.split(".")
-            if len(parts) >= 2 and (int(parts[0]), int(parts[1])) >= (12, 8):
-                archs.extend(["10.0", "12.0"])
+            if len(parts) >= 2 and (int(parts[0]), int(parts[1])) >= (12, 0):
+                archs.append("9.0")
         except ValueError:
             pass
     # Embed PTX for the highest target so future architectures can JIT-compile.
@@ -224,12 +220,12 @@ if marker_version:
 else:
     # Add backend suffix to version for wheelhouse organization
     backend_suffix = ""
-    if build_backend in ["cu126"]:
-        backend_suffix = "cu126"
-    elif build_backend in ["cu128"]:
-        backend_suffix = "cu128"
-    elif build_backend in ["cu129"]:
-        backend_suffix = "cu129"
+    if build_backend in ["cu118"]:
+        backend_suffix = "cu118"
+    elif build_backend in ["cu121"]:
+        backend_suffix = "cu121"
+    elif build_backend in ["cu124"]:
+        backend_suffix = "cu124"
     else:
         backend_suffix = "cpu"
 
@@ -258,7 +254,7 @@ setup(
     author_email="tegunov@gmail.com",
     description="Differentiable forward and backward projectors for cryo-EM with fast native implementations for CPU, CUDA, and MPS backends.",
     install_requires=[
-        "torch>=2.6.0",  # Lower bound - built against PyTorch 2.6+ (depending on CUDA version)
+        "torch>=2.5.1",  # Lower bound - built against PyTorch 2.5.1 (supporting CUDA 11.8, 12.1, 12.4)
     ],
     ext_modules=[
         extension_class(
@@ -271,4 +267,4 @@ setup(
     ],
     cmdclass={"build_ext": CustomBuildExt},
     packages=["torch_projectors"],
-) 
+)
